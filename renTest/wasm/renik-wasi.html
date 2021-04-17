@@ -1,0 +1,30 @@
+<!-- // https://gist.github.com/kripken/59c67556dc03bb6d57052fedef1e61ab#file-hello_world-html -->
+
+<html>
+<head>
+  <script src="barebonesWASI.js"></script>
+  <script src="renik-wasi.wasm.js"></script>
+  <script>
+    // Check for wasm support.
+    if (!('WebAssembly' in window)) {
+      alert('you need a browser with wasm support enabled :(');
+    }
+    var wasiPolyfill = new barebonesWASI();
+      WebAssembly.instantiate(wasm_codearray, {js: { mem: new WebAssembly.Memory({ initial: 2, maximum: 10 }) }, wasi_unstable: wasiPolyfill})
+      .then(module => {
+        module.instance.console_log = (msg) => {
+          STDOUT.innerText += msg;
+        };
+        wasiPolyfill.setModuleInstance(module.instance);
+        module.instance.exports._start();
+      }
+    ).catch(console.error.bind(console, 'wtf'));
+
+
+  </script>
+</head>
+<body>
+  <a href="renik-wasi.cpp">renik-wasi.cpp</a>
+  <pre id=STDOUT></pre>
+</body>
+</html>

@@ -19,13 +19,13 @@ struct Resource : public Reference {};
 // Engine
 
 #include <string>
-#include <core/io/resource.h>
+// #include <core/io/resource.h>
 struct ClassDB {
   template <typename M> static void bind_method(std::string a, M b);
   template <typename M> static void register_class();
 };
 
-std::string D_METHOD(std::string a, std::string b = "", std::string c = "") { return a+"::"+b+"::"+c; }
+inline std::string D_METHOD(std::string a, std::string b = "", std::string c = "") { return a+"::"+b+"::"+c; }
 
 struct Engine {
   static Engine* get_singleton() { return nullptr; }
@@ -73,8 +73,9 @@ struct Node : public Object {
 
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
-
-#include <scene/main/node.h>
+#include <glm/gtx/vector_angle.hpp>
+#include <glm/gtc/epsilon.hpp>
+// #include <scene/main/node.h>
 
 #define GDCLASS(a,b)
 #define Math_PI M_PI
@@ -107,21 +108,22 @@ struct Map {
 struct Vector3 {
 public:
   glm::vec3 value;
-  operator glm::vec3() const;
+  operator glm::vec3() const { return value; }
   Vector3() : value(){}
   Vector3(glm::vec3 const& v) : value(v){}
   Vector3(double x, double y, double z) : value(x,y,z){}
   Vector3& operator+=(Vector3 const&);
   Vector3 normalized() const { return glm::normalize(value); }
   void normalize() { value = glm::normalize(value); }
-  Vector3 cross(Vector3 const& o) const { return glm::cross(value, (glm::vec3)o); }
+  Vector3 cross(Vector3 const& o) const { return glm::cross(value, o.value); }
   float dot(glm::vec3 const& o) const { return glm::dot(value, o); }
   float length() const;
-  float length_squared() const;
+  float length_squared() const { return glm::length2(value); }
   void rotate(Vector3 axis, float angle);
   Vector3 rotated(Vector3 axis, float angle) const;
-  float angle_to(Vector3) const;
+  float angle_to(Vector3 const& o) const { return glm::angle(glm::normalize(value), glm::normalize(o.value)); }
   float distance_squared_to(Vector3) const;
+  float distance_to(Vector3 const&) const;
   Vector3 linear_interpolate(Vector3 const& other, float alpha) const;
   Vector3 cubic_interpolate(Vector3 const& other, Vector3 alpha, Vector3, float) const;
   Vector3 slerp(Vector3 const& other, float alpha) const;// { return glm::slerp(value, (glm::vec3)other, alpha); }
@@ -132,8 +134,8 @@ public:
   Vector3 operator+(Vector3) const;
   Vector3 operator-(Vector3) const;
   Vector3 operator-() const;
-  float operator[](int) const;
-  float& operator[](int);
+  float operator[](int i) const { return value[i]; }
+  float& operator[](int i) { return value[i]; }
   Vector3 project(Vector3 const&) const;
   struct _X { Vector3* p; inline _X& operator=(float v) { p->x = v; return *this; }inline operator float() const & { return p->value.x; }} x {this};
   struct _Y { Vector3* p; inline _Y& operator=(float v) { p->y = v; return *this; }inline operator float() const & { return p->value.y; }} y {this};
@@ -142,21 +144,22 @@ public:
 
 struct Quat {
   glm::quat value;
-  operator const glm::quat& () const;
+  operator const glm::quat& () const { return value; };
   // operator const glm::quat() const;
   Quat() : value() {}
   Quat(glm::quat const& q) : value(q) {}
   Quat(Quat const& q) : value(q) {}
-  explicit Quat(Vector3 const& euler) : value(glm::radians((glm::vec3)euler)) {}
-  explicit Quat(Vector3 const& axis, float angle) : value(glm::angleAxis(angle, (glm::vec3)axis)) {}
-  Quat& operator=(Vector3 const& euler) { *this = Quat(euler); return *this; }
-  Quat slerp(Quat const& other, float alpha) const { return glm::slerp((glm::quat)value, (glm::quat)other, alpha); }
-  Quat inverse() const { return glm::inverse((glm::quat)*this); }
-  Quat normalized() const { return glm::normalize((glm::quat)*this); }
-  void normalize() { *this = glm::normalize((glm::quat)*this); }
-  Vector3 xform(Vector3 const& other) const { return (glm::quat)*this * (glm::vec3)other; }
-  Vector3 get_euler() const { return glm::eulerAngles((glm::quat)*this); }
-  Quat operator*(Quat const& o) const { return (glm::quat)*this * (glm::quat)o; }
+  explicit Quat(Vector3 const& euler) : value(euler.value) {}
+  explicit Quat(Vector3 const& axis, float angle) : value(glm::angleAxis(angle, axis.value)) {}
+  Quat& operator=(Vector3 const& euler) { value = glm::quat(euler); return *this; }
+  Quat slerp(Quat const& other, float alpha) const { return glm::slerp(value, other.value, alpha); }
+  Quat inverse() const { return glm::inverse(value); }
+  Quat normalized() const { return glm::normalize(value); }
+  void normalize() { value = glm::normalize(value); }
+  Vector3 xform(Vector3 const& other) const { return value * other.value; }
+  Vector3 get_euler() const { return glm::eulerAngles(value); }
+  bool operator==(Quat const& o) const { return glm::all(glm::epsilonEqual(value, o.value, 0.0001f)); }
+  Quat operator*(Quat const& o) const { return value * o.value; }
   Vector3 operator-() const;
   struct _W { Quat* p; inline _W& operator=(float v) { p->w = v; return *this; } inline operator float() const & { return p->value.w; }} w {this};
   struct _X { Quat* p; inline _X& operator=(float v) { p->x = v; return *this; }inline operator float() const & { return p->value.x; }} x {this};
@@ -174,9 +177,11 @@ public:
   Basis(glm::mat4 const& o) : value(o) {};
   Basis(Quat const& o) : Basis(glm::toMat3((glm::quat)o)) {};
   Basis(Vector3 const& a, Vector3 const& b, Vector3 const& c) : value(a,b,c) {};
-  Basis(Vector3 const& axis, float angle) : value(glm::toMat3(glm::angleAxis(angle, (glm::vec3)axis))) {};
+  Basis(Vector3 const& axis, float angle) : value(glm::toMat3(glm::angleAxis(angle, axis.value))) {};
   Basis inverse() const { return glm::inverse(value); }
-  Basis rotate_local(glm::vec3 const&, float);
+  Basis rotate_local(Vector3 const&, float);
+  Basis rotated_local(Vector3 const& axis, float angle) const;
+  void orthonormalize();
   void rotate(glm::vec3 const&, float);
   Vector3 xform(Vector3 const&) const;
   Vector3 xform_inv(Vector3 const&) const;
@@ -186,60 +191,27 @@ public:
   Vector3 operator[](int) const;
   Vector3& operator[](int);
   Quat get_rotation_quat() const { return glm::toQuat(value); }
+  Quat get_quat() const { return glm::toQuat(value); }
 };
 
 struct Transform {
 public:
-  glm::mat4 value;
-  operator const glm::mat4() const;
-  Transform() : value() {}
-  Transform(Quat const& q, Vector3 const& v) : value(glm::translate(glm::mat4(1.0f), (glm::vec3)v) * glm::toMat4((glm::quat)q)) {}
-  Transform(Basis const& q, Vector3 const& v) : Transform(glm::toQuat((glm::mat3)q), v) {}
-  Transform(Quat const& q) : value(glm::toMat4((glm::quat)q)) {}
-  Transform(glm::mat4 const& o) : value(o) {}
-  Transform(Basis const& o) : value(o.value) {}
-  Transform(Vector3 const& o) : value(glm::translate(glm::mat4(), o.value)) {}
-  struct _Basis {
-    operator Basis() const { return glm::mat3(*p); }
-    Transform* p;
-    _Basis(Transform* p) : p(p) {}
-    _Basis& operator=(Basis const& other) { *p = other; return *this; }
-    Vector3 xform(Vector3 const&);
-    Vector3 xform_inv(Vector3 const&);
-    Basis inverse() const { return glm::inverse((glm::mat3)*p); }
-    Basis rotate(Vector3 const&, float);
-    Basis slerp(Basis const& other, float alpha) const;// { return glm::mix(p->value, (glm::mat3)other, alpha); }
-    Quat get_rotation_quat() const { return glm::toQuat(glm::mat3(*p)); }
-    Quat get_quat() const { return glm::toQuat(glm::mat3(*p)); }
-    friend Basis operator*(_Basis const& lhs, Quat const& rhs);
-    Vector3 operator[](int) const;
-    Vector3 cubic_interpolate(Vector3 const& other, Vector3 alpha, Vector3, float) const;
+  Basis basis;
+  Vector3 origin;
+  glm::mat4 as_mat4() const { return glm::translate(glm::mat4(basis.value), origin.value); }
+  Transform() {}
+  Transform(glm::mat4 const& o) : basis(glm::toQuat(o)), origin(o[3]) {}
+  Transform(Quat const& q, Vector3 const& v) : basis(q), origin(v) {}
+  Transform(Basis const& q, Vector3 const& v) : basis(q), origin(v) {}
+  Transform(Quat const& q) : basis(q) {}
+  Transform(Basis const& o) : basis(o) {}
+  Transform(Vector3 const& o) : origin(o) {}
 
-    Basis rotated_local(Vector3 axis, float angle) const;
-    void orthonormalize();
+  Basis get_basis() const { return basis; }
 
-  };
-  _Basis basis{this};
-  _Basis get_basis() const { return basis; }
-  struct _Origin {
-    Transform* p;
-    _Origin(Transform* p) : p(p) {}
-    _Origin& operator=(Vector3 const& v) { p->value[3] = glm::vec4((glm::vec3)v,1); return *this; }
-    operator Vector3() const { return Vector3(p->value[3]); }
-    float length() const;
-    float distance_to(Vector3 const&) const;
-    float distance_squared_to(Vector3) const;
-    friend Vector3 operator-(_Origin const& lhs, Vector3 const& rhs);
-    friend Vector3 operator+(_Origin const& lhs, Vector3 const& rhs);
-    Vector3 operator-() const;
-    Vector3 cubic_interpolate(Vector3 const& other, Vector3 alpha, Vector3, float) const;
-  };
-  _Origin origin{this};
   Vector3 get_origin() const { return origin; }
-  void set_origin(Vector3 const& v) {
-    value[3] = glm::vec4(glm::vec3(v), 1);
-  }
-  Transform affine_inverse() const { return glm::inverse(value); }
+  void set_origin(Vector3 const& v) { origin = v; }
+  Transform affine_inverse() const { return glm::inverse(as_mat4()); }
   Vector3 xform(Vector3 const&);
   Vector3 xform_inv(Vector3 const&);
   Transform translated(Vector3 const&);
@@ -252,17 +224,26 @@ public:
 
   Transform interpolate_with(Transform const&, float) const;
   void translate(Vector3 const&);
-
 };
 
-namespace Math {
-  static constexpr auto cos = ::cos;
-  inline double deg2rad (double degrees) { return degrees * 4.0 * atan (1.0) / 180.0; }
-  inline float rad2deg(float angle) { return angle * 180.0 / M_PI; }
-  inline float abs(float v) { return fabs(v); }
-  inline float fmod(float a, float b) { return fmod(a,b); }
+
+#include <glm/gtx/string_cast.hpp>
+namespace glm {
+  template<> inline std::string to_string(Quat const& q) { return glm::to_string<glm::quat>(q.value); }
+  template<> inline std::string to_string(Vector3 const& q) { return glm::to_string<glm::vec3>(q.value); }
+  template<> inline std::string to_string(Basis const& q) { return glm::to_string<glm::mat3>(q.value); }
+  template<> inline std::string to_string(Transform const& q) { return glm::to_string<glm::mat4>(q.as_mat4()); }
 }
-inline float abs(float v) { return Math::abs(v); }
+
+namespace Math {
+  inline float deg2rad (float degrees) { return degrees * M_PI / 180.0; }
+  inline float rad2deg(float angle) { return angle * 180.0 / M_PI; }
+  inline float fabs(float v) { return ::fabs(v); }
+  inline float cos(float v) { return ::cos(v); }
+  inline float fmod(float a, float b) { return ::fmod(a,b); }
+}
+#define abs(x) fabs(x)
+//float abs(float v) { return fabs(v); }
 
 struct Spatial : public Node {
   bool is_inside_world();
@@ -273,7 +254,7 @@ struct Spatial : public Node {
 // ---------------------------------------------------------------------------
 // Skeleton
 
-using BoneId = uint16_t;
+using BoneId = int16_t;
 
 struct Skeleton : public Spatial {
   int get_bone_count() { return -1; }
